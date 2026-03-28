@@ -1,0 +1,104 @@
+package com.farmtracker.activities
+
+import android.app.DatePickerDialog
+import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.MenuItem
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import com.farmtracker.database.DatabaseHelper
+import com.farmtracker.databinding.ActivityAddIncomeBinding
+import com.farmtracker.models.Income
+import java.text.NumberFormat
+import java.util.Calendar
+import java.util.Locale
+
+class AddIncomeActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityAddIncomeBinding
+    private lateinit var db: DatabaseHelper
+    private var selectedDate = ""
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityAddIncomeBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        setSupportActionBar(binding.toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.title = "Dodaj Prihod"
+        db = DatabaseHelper(this)
+        setupDatePicker()
+        setupAutoTotal()
+        setupSaveButton()
+        val cal = Calendar.getInstance()
+        selectedDate = "%04d-%02d-%02d".format(
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH) + 1,
+            cal.get(Calendar.DAY_OF_MONTH)
+        )
+        binding.btnPickDate.text = selectedDate
+    }
+
+    private fun setupDatePicker() {
+        binding.btnPickDate.setOnClickListener {
+            val cal = Calendar.getInstance()
+            DatePickerDialog(this,
+                { _, year, month, day ->
+                    selectedDate = "%04d-%02d-%02d".format(year, month + 1, day)
+                    binding.btnPickDate.text = selectedDate
+                },
+                cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
+            ).show()
+        }
+    }
+
+    private fun setupAutoTotal() {
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val qty = binding.etQuantity.text.toString().replace(",", ".").toDoubleOrNull() ?: 0.0
+                val price = binding.etPrice.text.toString().replace(",", ".").toDoubleOrNull() ?: 0.0
+                val total = qty * price
+                val fmt = NumberFormat.getNumberInstance(Locale("sr", "RS")).apply {
+                    minimumFractionDigits = 2
+                    maximumFractionDigits = 2
+                }
+                binding.tvTotalValue.text = "${fmt.format(total)} RSD"
+            }
+        }
+        binding.etQuantity.addTextChangedListener(watcher)
+        binding.etPrice.addTextChangedListener(watcher)
+    }
+
+    private fun setupSaveButton() {
+        binding.btnSave.setOnClickListener {
+            val product = binding.etProduct.text.toString().trim()
+            val quantityStr = binding.etQuantity.text.toString().trim()
+            val priceStr = binding.etPrice.text.toString().trim()
+            if (product.isEmpty()) { binding.etProduct.error = "Unesite naziv proizvoda"; return@setOnClickListener }
+            if (quantityStr.isEmpty()) { binding.etQuantity.error = "Unesite količinu"; return@setOnClickListener }
+            if (priceStr.isEmpty()) { binding.etPrice.error = "Unesite cenu"; return@setOnClickListener }
+            val quantity = quantityStr.replace(",", ".").toDoubleOrNull()
+            val price = priceStr.replace(",", ".").toDoubleOrNull()
+            if (quantity == null || quantity <= 0) { binding.etQuantity.error = "Neispravan broj"; return@setOnClickListener }
+            if (price == null || price <= 0) { binding.etPrice.error = "Neispravan broj"; return@setOnClickListener }
+            val income = Income(
+                date = selectedDate,
+                product = product,
+                quantity = quantity,
+                price = price,
+                total = quantity * price
+            )
+            db.addIncome(income)
+            Toast.makeText(this, "Prihod sačuvan!", Toast.LENGTH_SHORT).show()
+            finish()
+        }
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == android.R.id.home) finish()
+        return super.onOptionsItemSelected(item)
+    }
+}
